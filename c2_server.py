@@ -11,8 +11,8 @@ import requests
 # ============================================================
 # CONFIG — CHANGE THESE
 # ============================================================
-TELEGRAM_TOKEN = "YOUR_BOT_TOKEN_HERE"
-TELEGRAM_CHAT_ID = "YOUR_CHAT_ID_HERE"
+TELEGRAM_TOKEN = "8440979863:AAE8OS_UzuvJV6T-sEqC9PuO0TvNUNapur8"
+TELEGRAM_CHAT_ID = "8204622013"
 # ============================================================
 
 app = Flask(__name__)
