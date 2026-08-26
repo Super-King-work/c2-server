@@ -14,7 +14,6 @@ app = Flask(__name__)
 # ============================================================
 TELEGRAM_TOKEN = "8440979863:AAE8OS_UzuvJV6T-sEqC9PuO0TvNUNapur8"
 TELEGRAM_CHAT_ID = "8204622013"
-"
 # ============================================================
 
 # Create folders (for temporary storage)
